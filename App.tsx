@@ -493,7 +493,7 @@ const App: React.FC = () => {
                     <tbody>
                       <tr>
                         <td className="text-center no-border" width="50%"><p>Mengetahui,</p><p className="mb-12">Kepala Madrasah</p><p className="font-bold underline">{formData.namaKepala || '..............................'}</p><p>NIP: {formData.nipKepala || '..............................'}</p></td>
-                        <td className="text-center no-border" width="50%"><p>Jatinagara, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p><p className="mb-12">Guru Mata Pelajaran</p><p className="font-bold underline">{formData.namaGuru || '..............................'}</p><p>NIP: {formData.nipGuru || '..............................'}</p></td>
+                        <td className="text-center no-border" width="50%"><p>Wuluhan, {new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}</p><p className="mb-12">Guru Mata Pelajaran</p><p className="font-bold underline">{formData.namaGuru || '..............................'}</p><p>NIP: {formData.nipGuru || '..............................'}</p></td>
                       </tr>
                     </tbody>
                   </table>
