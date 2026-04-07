@@ -39,8 +39,13 @@ export interface GeneratedContent {
     refleksi: string[];
   }[];
   asesmenAwal: string;
+  asesmenAwalDetail: string;
   asesmenProses: string;
+  asesmenProsesDetail: string;
   asesmenAkhir: string;
+  asesmenAkhirDetail: string;
+  bahanAjar: string;
+  mediaPembelajaran: string;
   lkpd: {
     pertemuan: number;
     isi: string;

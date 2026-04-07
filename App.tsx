@@ -1,9 +1,11 @@
 
 import React, { useState } from 'react';
 import { RPPData, GeneratedContent } from './types';
-import { MODEL_PEMBELAJARAN, METODE_PEMBELAJARAN, DIMENSI_PROFIL, PANCA_CINTA } from './constants';
+import { MODEL_PEMBELAJARAN, METODE_PEMBELAJARAN, DIMENSI_PROFIL, PANCA_CINTA, MATA_PELAJARAN } from './constants';
 import { GoogleGenAI } from "@google/genai";
 import { Search, Loader2, Download, ChevronRight, ChevronLeft, CheckCircle2, FileText } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const App: React.FC = () => {
   const [step, setStep] = useState(1);
@@ -18,7 +20,7 @@ const App: React.FC = () => {
     nipKepala: '',
     fase: 'A',
     kelas: '1',
-    mapel: '',
+    mapel: 'Al-Qur\'an Hadis',
     tahunPelajaran: '2025/2026',
     semester: 'Ganjil',
     kesiapanMurid: '',
@@ -99,7 +101,12 @@ const App: React.FC = () => {
 
     setLoading(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const apiKey = process.env.GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("API Key Gemini tidak ditemukan. Pastikan sudah diatur di environment.");
+      }
+      
+      const ai = new GoogleGenAI({ apiKey });
       const prompt = `
         Buatkan konten RPP MI detail untuk data berikut:
         Mapel: ${formData.mapel}, Topik: ${formData.topik}, CP: ${formData.cp}, TP: ${formData.tp}
@@ -124,19 +131,24 @@ const App: React.FC = () => {
               "refleksi": ["langkah 1", "langkah 2", "langkah 3", "langkah 4", "langkah 5"]
             }
           ],
-          "asesmenAwal": "deskripsi instrumen tes tulis/rubrik lengkap",
-          "asesmenProses": "deskripsi observasi/rubrik/LKPD lengkap",
-          "asesmenAkhir": "deskripsi tes tulis/produk/portofolio lengkap",
+          "asesmenAwal": "Ringkasan instrumen asesmen awal (diagnostik) secara umum (1-2 kalimat).",
+          "asesmenAwalDetail": "Konten Lampiran 1: Asesmen Awal. Berisi Pertanyaan Pemantik dan Rubrik Asesmen Lengkap dalam format Markdown.",
+          "asesmenProses": "Ringkasan instrumen asesmen proses (formatif) secara umum (1-2 kalimat).",
+          "asesmenProsesDetail": "Konten Lampiran 2: Asesmen Proses. Berisi Penilaian Proses, Rubrik Penilaian, dan Teknik Penilaian Lengkap dalam format Markdown.",
+          "asesmenAkhir": "Ringkasan instrumen asesmen akhir (sumatif) secara umum (1-2 kalimat).",
+          "asesmenAkhirDetail": "Konten Lampiran 3: Asesmen Akhir. Berisi Soal-soal: I. Pilihan Ganda (WAJIB 20 butir), II. Isian (WAJIB 10 butir), III. Uraian (5 butir). Lengkap dengan: 1. Kunci Jawaban Pilihan Ganda, 2. Kunci Jawaban Isian, 3. Kunci Jawaban Uraian (Lengkap dengan penjelasan/pembahasan), dan 4. Pedoman Penskoran untuk setiap jenis soal. Format Markdown.",
           "lkpd": [
-            {
-              "pertemuan": 1,
-              "isi": "Konten Lembar Kerja Peserta Didik (LKPD) lengkap dengan instruksi tugas dan Rubrik Penilaian. Sesuaikan konten dengan TP: ${formData.tp}, Model Pembelajaran: ${formData.pertemuanDetails[0]?.model}, dan Metode: ${formData.pertemuanDetails[0]?.methods.join(', ')}"
-            }
+            ${(formData.pertemuanDetails || []).map((p, i) => `{
+              "pertemuan": ${i + 1},
+              "isi": "Konten Lampiran 4: Lembar Kerja Peserta Didik (LKPD) Pertemuan ${i + 1}. Memuat: 1. Materi Pembelajaran Singkat (minimal 1000 kata), 2. Tugas Murid sesuai model (${p.model}) dan metode (${(p.methods || []).join(', ')}), 3. Rubrik Penilaian Murid. Format Markdown."
+            }`).join(',\n')}
           ]
         }
         PENTING: 
-        1. Buat array "lkpd" sesuai jumlah pertemuan (${formData.jumlahPertemuan}). Setiap item harus disesuaikan dengan model dan metode pertemuan masing-masing.
-        2. Integrasikan secara eksplisit nilai-nilai dari Dimensi Profil Lulusan (${(formData.dimensiProfil || []).join(', ')}) dan Topik Panca Cinta (${(formData.topikPancaCinta || []).join(', ')}) ke dalam setiap langkah "pengalamanBelajar" (Memahami, Mengaplikasi, Refleksi) agar pembelajaran lebih berkarakter, bermakna, dan sesuai dengan identitas madrasah.
+        1. Buat array "lkpd" sesuai jumlah pertemuan (${formData.jumlahPertemuan}). Setiap item harus memuat materi minimal 1000 kata dan disesuaikan dengan model/metode masing-masing pertemuan.
+        2. Pada Lampiran 3, pastikan jumlah soal Pilihan Ganda adalah 20 butir dan Isian adalah 10 butir. Jangan dikurangi.
+        3. Gunakan format Markdown (tabel, list, bold) untuk semua konten lampiran agar terlihat profesional dan rapi saat dicetak.
+        4. Integrasikan secara eksplisit nilai-nilai dari Dimensi Profil Lulusan (${(formData.dimensiProfil || []).join(', ')}) dan Topik Panca Cinta (${(formData.topikPancaCinta || []).join(', ')}) ke dalam setiap langkah "pengalamanBelajar" (Memahami, Mengaplikasi, Refleksi) agar pembelajaran lebih berkarakter, bermakna, dan sesuai dengan identitas madrasah.
         Bahasa Indonesia formal, terstruktur, bermakna dan menggembirakan.
       `;
 
@@ -148,7 +160,21 @@ const App: React.FC = () => {
         }
       });
 
-      const result = JSON.parse(response.text || '{}');
+      let responseText = response.text || '';
+      // Robust JSON extraction in case model wraps it in markdown
+      if (responseText.includes('```json')) {
+        responseText = responseText.split('```json')[1].split('```')[0];
+      } else if (responseText.includes('```')) {
+        responseText = responseText.split('```')[1].split('```')[0];
+      }
+      
+      let result;
+      try {
+        result = JSON.parse(responseText.trim() || '{}');
+      } catch (e) {
+        console.error("JSON Parse Error:", e, "Raw Text:", responseText);
+        throw new Error("Gagal mengurai respon dari AI. Silakan coba lagi.");
+      }
       
       const safeResult: GeneratedContent = {
         integrasiKBC: result.integrasiKBC || '',
@@ -163,8 +189,13 @@ const App: React.FC = () => {
           refleksi: Array.isArray(pb.refleksi) ? pb.refleksi : []
         })) : [],
         asesmenAwal: result.asesmenAwal || '',
+        asesmenAwalDetail: result.asesmenAwalDetail || '',
         asesmenProses: result.asesmenProses || '',
+        asesmenProsesDetail: result.asesmenProsesDetail || '',
         asesmenAkhir: result.asesmenAkhir || '',
+        asesmenAkhirDetail: result.asesmenAkhirDetail || '',
+        bahanAjar: '',
+        mediaPembelajaran: '',
         lkpd: Array.isArray(result.lkpd) ? result.lkpd.map((l: any) => ({
           pertemuan: l.pertemuan || 1,
           isi: l.isi || ''
@@ -173,9 +204,9 @@ const App: React.FC = () => {
 
       setGenerated(safeResult);
       setStep(3);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating RPP:", error);
-      alert("Gagal membuat RPP. Silakan periksa koneksi atau API Key.");
+      alert(`Gagal membuat RPP: ${error.message || "Terjadi kesalahan tidak dikenal"}`);
     } finally {
       setLoading(false);
     }
@@ -201,6 +232,16 @@ const App: React.FC = () => {
         p, li { margin: 0; padding: 0; margin-bottom: 1px; }
         table { border-collapse: collapse; width: 100%; margin-bottom: 10px; table-layout: fixed; }
         th, td { border: 1px solid #000; padding: 3px 5px; vertical-align: top; word-wrap: break-word; }
+        .markdown-body h1 { font-size: 14pt; font-weight: bold; margin-top: 10px; margin-bottom: 5px; }
+        .markdown-body h2 { font-size: 13pt; font-weight: bold; margin-top: 8px; margin-bottom: 4px; }
+        .markdown-body h3 { font-size: 12pt; font-weight: bold; margin-top: 6px; margin-bottom: 3px; }
+        .markdown-body p { margin-bottom: 5px; }
+        .markdown-body ul, .markdown-body ol { margin-bottom: 5px; padding-left: 20px; }
+        .markdown-body li { margin-bottom: 2px; }
+        .markdown-body table { border: 1px solid #000; border-collapse: collapse; width: 100%; margin-bottom: 10px; }
+        .markdown-body th, .markdown-body td { border: 1px solid #000; padding: 3px; }
+        .markdown-body strong { font-weight: bold; }
+        .markdown-body em { font-style: italic; }
         .no-border { border: none !important; }
         .bg-green-800 { background-color: #064e3b !important; color: white !important; font-weight: bold; }
         .bg-slate-50 { background-color: #f8fafc !important; }
@@ -295,7 +336,33 @@ const App: React.FC = () => {
 
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-6 pt-2">
                     <div className="md:col-span-1">
-                      <Input label="Mata Pelajaran" name="mapel" value={formData.mapel} onChange={handleInputChange} placeholder="Contoh: Matematika" />
+                      <Select 
+                        label="Mata Pelajaran" 
+                        name="mapelSelect" 
+                        value={MATA_PELAJARAN.includes(formData.mapel) ? formData.mapel : (formData.mapel ? 'Lainnya...' : MATA_PELAJARAN[0])} 
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (val !== 'Lainnya...') {
+                            setFormData(prev => ({ ...prev, mapel: val }));
+                          } else if (!MATA_PELAJARAN.includes(formData.mapel)) {
+                            // Keep current custom value
+                          } else {
+                            setFormData(prev => ({ ...prev, mapel: '' }));
+                          }
+                        }} 
+                        options={MATA_PELAJARAN} 
+                      />
+                      {(!MATA_PELAJARAN.includes(formData.mapel) || formData.mapel === 'Lainnya...') && (
+                        <div className="mt-2">
+                          <Input 
+                            label="Tulis Mapel Lainnya" 
+                            name="mapel" 
+                            value={formData.mapel === 'Lainnya...' ? '' : formData.mapel} 
+                            onChange={handleInputChange} 
+                            placeholder="Ketik nama mapel..." 
+                          />
+                        </div>
+                      )}
                     </div>
                     <Select label="Fase" name="fase" value={formData.fase} onChange={handleInputChange} options={['A', 'B', 'C']} />
                     <Select label="Kelas" name="kelas" value={formData.kelas} onChange={handleInputChange} options={['1', '2', '3', '4', '5', '6']} />
@@ -412,7 +479,7 @@ const App: React.FC = () => {
                   {/* I. IDENTITAS */}
                   <table className="w-full border-collapse mb-1">
                     <thead>
-                      <tr><th colSpan={2} className="bg-green-800 text-white p-2 text-left border border-green-900 uppercase">I. IDENTITAS</th></tr>
+                      <tr><th colSpan={2} className="bg-green-800 text-white p-2 text-left border border-green-900 uppercase">IDENTITAS</th></tr>
                     </thead>
                     <tbody>
                       <tr><td className="border border-slate-300 p-1 w-[35%] bg-slate-50 font-semibold">Nama Guru</td><td className="border border-slate-300 p-1">{formData.namaGuru}</td></tr>
@@ -428,7 +495,7 @@ const App: React.FC = () => {
                   {/* II. IDENTIFIKASI */}
                   <table className="w-full border-collapse mb-1">
                     <thead>
-                      <tr><th colSpan={2} className="bg-green-800 text-white p-2 text-left border border-green-900 uppercase">II. IDENTIFIKASI</th></tr>
+                      <tr><th colSpan={2} className="bg-green-800 text-white p-2 text-left border border-green-900 uppercase">IDENTIFIKASI</th></tr>
                     </thead>
                     <tbody>
                       <tr><td className="border border-slate-300 p-1 w-[35%] bg-slate-50 font-semibold">Kesiapan Murid</td><td className="border border-slate-300 p-1 text-justify">{formData.kesiapanMurid}</td></tr>
@@ -441,14 +508,14 @@ const App: React.FC = () => {
                   {/* III. DESAIN PEMBELAJARAN */}
                   <table className="w-full border-collapse mb-1">
                     <thead>
-                      <tr><th colSpan={2} className="bg-green-800 text-white p-2 text-left border border-green-900 uppercase">III. DESAIN PEMBELAJARAN</th></tr>
+                      <tr><th colSpan={2} className="bg-green-800 text-white p-2 text-left border border-green-900 uppercase">DESAIN PEMBELAJARAN</th></tr>
                     </thead>
                     <tbody>
                       <tr><td className="border border-slate-300 p-1 w-[35%] bg-slate-50 font-semibold">Capaian Pembelajaran (CP)</td><td className="border border-slate-300 p-1 text-justify">{formData.cp}</td></tr>
                       <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Tujuan Pembelajaran (TP)</td><td className="border border-slate-300 p-1 text-justify">{formData.tp}</td></tr>
                       <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Lintas Disiplin Ilmu</td><td className="border border-slate-300 p-1">{generated.lintasDisiplin}</td></tr>
                       <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Topik Pembelajaran</td><td className="border border-slate-300 p-1">{formData.topik}</td></tr>
-                      <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Praktik Pedagogis</td><td className="border border-slate-300 p-1">{(formData.pertemuanDetails || []).map((p, i) => `P${i+1}: ${p.model} (${(p.methods || []).join(', ')})`).join('; ')}</td></tr>
+                      <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Model & Metode</td><td className="border border-slate-300 p-1">{(formData.pertemuanDetails || []).map((p, i) => `P${i+1}: ${p.model} (${(p.methods || []).join(', ')})`).join('; ')}</td></tr>
                       <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Kemitraan Pembelajaran</td><td className="border border-slate-300 p-1">{generated.kemitraan}</td></tr>
                       <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Lingkungan Pembelajaran</td><td className="border border-slate-300 p-1">{generated.lingkungan}</td></tr>
                       <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Pemanfaatan Digital</td><td className="border border-slate-300 p-1">{generated.pemanfaatanDigital}</td></tr>
@@ -458,7 +525,7 @@ const App: React.FC = () => {
                   {/* IV. PENGALAMAN BELAJAR */}
                   <table className="w-full border-collapse mb-1">
                     <thead>
-                      <tr><th colSpan={2} className="bg-green-800 text-white p-2 text-left border border-green-900 uppercase">IV. PENGALAMAN BELAJAR</th></tr>
+                      <tr><th colSpan={2} className="bg-green-800 text-white p-2 text-left border border-green-900 uppercase">PENGALAMAN BELAJAR</th></tr>
                     </thead>
                     <tbody>
                       {(generated.pengalamanBelajar || []).map((p, idx) => (
@@ -479,12 +546,12 @@ const App: React.FC = () => {
                   {/* V. ASESMEN PEMBELAJARAN */}
                   <table className="w-full border-collapse mb-1">
                     <thead>
-                      <tr><th colSpan={2} className="bg-green-800 text-white p-2 text-left border border-green-900 uppercase">V. ASESMEN PEMBELAJARAN</th></tr>
+                      <tr><th colSpan={2} className="bg-green-800 text-white p-2 text-left border border-green-900 uppercase">ASESMEN PEMBELAJARAN</th></tr>
                     </thead>
                     <tbody>
-                      <tr><td className="border border-slate-300 p-1 w-[35%] bg-slate-50 font-semibold">Asesmen Awal (Diagnostik)</td><td className="border border-slate-300 p-1 text-sm">{generated.asesmenAwal}</td></tr>
-                      <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Asesmen Proses (Formatif)</td><td className="border border-slate-300 p-1 text-sm">{generated.asesmenProses}</td></tr>
-                      <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Asesmen Akhir (Sumatif)</td><td className="border border-slate-300 p-1 text-sm">{generated.asesmenAkhir}</td></tr>
+                      <tr><td className="border border-slate-300 p-1 w-[35%] bg-slate-50 font-semibold">Asesmen Awal (Diagnostik)</td><td className="border border-slate-300 p-1 text-sm">{generated.asesmenAwal} (Terlampir)</td></tr>
+                      <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Asesmen Proses (Formatif)</td><td className="border border-slate-300 p-1 text-sm">{generated.asesmenProses} (Terlampir)</td></tr>
+                      <tr><td className="border border-slate-300 p-1 bg-slate-50 font-semibold">Asesmen Akhir (Sumatif)</td><td className="border border-slate-300 p-1 text-sm">{generated.asesmenAkhir} (Terlampir)</td></tr>
                     </tbody>
                   </table>
 
@@ -500,49 +567,42 @@ const App: React.FC = () => {
 
                   {/* APPENDICES */}
                   <div className="page-break"></div>
-                  <div className="text-center mt-6">
-                    <h3 className="text-xl font-bold uppercase underline">LAMPIRAN - LAMPIRAN</h3>
-                    <p className="text-slate-500 text-gray italic text-sm mt-1">copy prompt dibawah paste di gemini canvas kemudian paste lagi disini</p>
+                  <div className="text-center mt-12 mb-8">
+                    <h3 className="text-2xl font-bold uppercase underline decoration-2 underline-offset-8 text-green-900">LAMPIRAN - LAMPIRAN</h3>
                   </div>
 
-                  <div className="mt-6">
-                    <h4 className="font-bold uppercase">LAMPIRAN 1 : ASESSMEN AWAL</h4>
-                    <p>buatkan assesmen awal dan rubrik dari tujuan pembelajaran</p>
-                    <p className="font-semibold italic mt-1">Tujuan Pembelajaran:</p>
-                    <p className="p-1 border border-slate-200 bg-slate-50 italic">{formData.tp}</p>
-                    <p className="mt-1 font-semibold">dengan deskripsi:</p>
-                    <div className="p-1 border border-slate-200 text-justify text-sm">{generated.asesmenAwal}</div>
+                  <div className="mt-8">
+                    <h4 className="font-bold uppercase border-b-4 border-green-800 mb-4 pb-1 text-lg text-green-900">LAMPIRAN 1 : ASESMEN AWAL (DIAGNOSTIK)</h4>
+                    <div className="markdown-body text-sm p-4 border border-slate-200 rounded-xl bg-slate-50 shadow-sm">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{generated.asesmenAwalDetail}</ReactMarkdown>
+                    </div>
                   </div>
 
-                  <div className="mt-6">
-                    <h4 className="font-bold uppercase">LAMPIRAN 2 : ASESSMEN PROSES</h4>
-                    <p>buatkan assesmen proses dan rubrik dari tujuan pembelajaran</p>
-                    <p className="font-semibold italic mt-1">Tujuan Pembelajaran:</p>
-                    <p className="p-1 border border-slate-200 bg-slate-50 italic">{formData.tp}</p>
-                    <p className="mt-1 font-semibold">dengan deskripsi:</p>
-                    <div className="p-1 border border-slate-200 text-justify text-sm">{generated.asesmenProses}</div>
+                  <div className="mt-8">
+                    <h4 className="font-bold uppercase border-b-4 border-green-800 mb-4 pb-1 text-lg text-green-900">LAMPIRAN 2 : ASESMEN PROSES (FORMATIF)</h4>
+                    <div className="markdown-body text-sm p-4 border border-slate-200 rounded-xl bg-slate-50 shadow-sm">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{generated.asesmenProsesDetail}</ReactMarkdown>
+                    </div>
                   </div>
 
-                  <div className="mt-6">
-                    <h4 className="font-bold uppercase">LAMPIRAN 3 : ASESSMEN AKHIR</h4>
-                    <p>buatkan assesmen akhir dan rubrik dari tujuan pembelajaran</p>
-                    <p className="font-semibold italic mt-1">Tujuan Pembelajaran:</p>
-                    <p className="p-1 border border-slate-200 bg-slate-50 italic">{formData.tp}</p>
-                    <p className="mt-1 font-semibold">dengan deskripsi:</p>
-                    <div className="p-1 border border-slate-200 text-justify text-sm">{generated.asesmenAkhir}</div>
+                  <div className="mt-8">
+                    <h4 className="font-bold uppercase border-b-4 border-green-800 mb-4 pb-1 text-lg text-green-900">LAMPIRAN 3 : ASESMEN AKHIR (SUMATIF)</h4>
+                    <div className="markdown-body text-sm p-4 border border-slate-200 rounded-xl bg-slate-50 shadow-sm">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{generated.asesmenAkhirDetail}</ReactMarkdown>
+                    </div>
                   </div>
 
-                  <div className="mt-6">
-                    <h4 className="font-bold uppercase">LAMPIRAN 4 : LKPD DAN RUBRIK</h4>
-                    <p>buatkan assesmen lkpd dan rubrik dari tujuan pembelajaran</p>
-                    <p className="font-semibold italic mt-1">Tujuan Pembelajaran:</p>
-                    <p className="p-1 border border-slate-200 bg-slate-50 italic">{formData.tp}</p>
-                    
+                  <div className="mt-8">
+                    <h4 className="font-bold uppercase border-b-4 border-green-800 mb-4 pb-1 text-lg text-green-900">LAMPIRAN 4 : LEMBAR KERJA PESERTA DIDIK (LKPD)</h4>
                     {generated.lkpd.map((item, idx) => (
-                      <div key={idx} className="mt-4 border-l-4 border-green-800 pl-4 bg-slate-50 p-2">
-                        <h5 className="font-bold text-green-900 border-b mb-1 pb-1">LKPD Pertemuan Ke-{item.pertemuan}</h5>
-                        <p className="text-[10pt] mb-1 italic text-slate-600">Disesuaikan dengan Model: {formData.pertemuanDetails[idx]?.model || '-'} & Metode: {(formData.pertemuanDetails[idx]?.methods || []).join(', ')}</p>
-                        <div className="text-justify text-sm whitespace-pre-wrap">{item.isi}</div>
+                      <div key={idx} className="mt-6 border-2 border-slate-200 rounded-xl overflow-hidden shadow-sm">
+                        <div className="bg-green-100 p-3 border-b-2 border-slate-200">
+                          <h5 className="font-bold text-green-900 text-base">LKPD Pertemuan Ke-{item.pertemuan}</h5>
+                          <p className="text-[10pt] italic text-slate-700 font-medium">Model: {formData.pertemuanDetails[idx]?.model || '-'} | Metode: {(formData.pertemuanDetails[idx]?.methods || []).join(', ')}</p>
+                        </div>
+                        <div className="p-6 markdown-body text-sm bg-white">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.isi}</ReactMarkdown>
+                        </div>
                       </div>
                     ))}
                   </div>
